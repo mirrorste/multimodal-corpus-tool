@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Float
+from sqlalchemy import Column, String, Integer, DateTime, Float, Text
 from app.core.database import Base
 import uuid
 from datetime import datetime
@@ -15,5 +15,12 @@ class Video(Base):
     resolution = Column(String)
     status = Column(String, default="pending")
     file_path = Column(String)
+    file_size = Column(Float)
+    download_progress = Column(Float, default=0.0)
+    downloaded_bytes = Column(Float, default=0.0)
+    total_bytes = Column(Float, default=0.0)
+    error_message = Column(Text)
+    preferred_resolution = Column(String, default="1080p")
+    thumbnail_url = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

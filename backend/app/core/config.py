@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     FFMPEG_PATH: str = "ffmpeg"
     LOG_LEVEL: str = "INFO"
+    DOWNLOAD_DIR: str = "./downloads"
+    UPLOAD_DIR: str = "./uploads"
+    MAX_UPLOAD_SIZE: int = 2048  # MB
 
     @property
     def DATABASE_URL(self) -> str:
