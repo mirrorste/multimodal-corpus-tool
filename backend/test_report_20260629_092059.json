@@ -1,0 +1,123 @@
+{
+  "summary": {
+    "total": 16,
+    "passed": 16,
+    "failed": 0,
+    "pass_rate": "100.0%",
+    "timestamp": "2026-06-29T09:20:59.337361"
+  },
+  "results": [
+    {
+      "case_id": "TC-API-000",
+      "name": "健康检查",
+      "passed": true,
+      "message": "响应: {'status': 'healthy'}",
+      "timestamp": "2026-06-29 09:20:56"
+    },
+    {
+      "case_id": "TC-API-007",
+      "name": "获取视频列表",
+      "passed": true,
+      "message": "返回 5 条记录",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-008",
+      "name": "按状态筛选 (pending)",
+      "passed": true,
+      "message": "返回 4 条记录",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-013",
+      "name": "获取单个视频",
+      "passed": true,
+      "message": "ID: 1118e41a...",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-014",
+      "name": "获取不存在的视频",
+      "passed": true,
+      "message": "正确返回 404",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-021",
+      "name": "批量创建视频",
+      "passed": true,
+      "message": "创建 3 条记录",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-024",
+      "name": "触发下载",
+      "passed": true,
+      "message": "状态变为 queued",
+      "timestamp": "2026-06-29 09:20:57"
+    },
+    {
+      "case_id": "TC-API-029",
+      "name": "获取下载进度",
+      "passed": true,
+      "message": "状态: failed, 进度: 0.0",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-028",
+      "name": "下载不存在的视频",
+      "passed": true,
+      "message": "正确返回 404",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-033",
+      "name": "获取不存在视频的进度",
+      "passed": true,
+      "message": "正确返回 404",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-051",
+      "name": "获取任务列表",
+      "passed": true,
+      "message": "返回 9 个任务",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-044",
+      "name": "获取不存在的任务",
+      "passed": true,
+      "message": "正确返回 404",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-043",
+      "name": "获取任务状态",
+      "passed": true,
+      "message": "任务 ID: 1118e41a...",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-047",
+      "name": "取消任务",
+      "passed": true,
+      "message": "状态: failed",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-016",
+      "name": "删除视频",
+      "passed": true,
+      "message": "删除成功",
+      "timestamp": "2026-06-29 09:20:59"
+    },
+    {
+      "case_id": "TC-API-018",
+      "name": "删除不存在的视频",
+      "passed": true,
+      "message": "正确返回 404",
+      "timestamp": "2026-06-29 09:20:59"
+    }
+  ]
+}

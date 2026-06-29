@@ -1,12 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.config import settings
+from app.core.database import init_db
 from app.api.v1 import videos, tasks, corpus, annotations
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize database
+    await init_db()
+    yield
+    # Shutdown: cleanup if needed
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
     description="多模态语料获取工具 - 视听翻译与隐喻分析",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
