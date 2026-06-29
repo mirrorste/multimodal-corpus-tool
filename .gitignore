@@ -11,6 +11,8 @@ dist/
 build/
 *.log
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 uploads/
 temp/

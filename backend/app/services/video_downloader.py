@@ -1,9 +1,35 @@
 import yt_dlp
 import os
-import asyncio
+import shutil
+import re
+import subprocess
 from typing import Optional, Callable, Dict, Any
 from app.core.config import settings
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def sanitize_filename(title: str) -> str:
+    if not title:
+        return ""
+    filename = title.strip()
+    filename = re.sub(r'\s+', '_', filename)
+    filename = re.sub(r'[\\/:*?"<>|]', '', filename)
+    filename = filename.replace('\n', '_').replace('\r', '_')
+    if len(filename) > 150:
+        filename = filename[:150]
+    return filename
+
+
+def check_ffmpeg() -> bool:
+    ffmpeg_path = getattr(settings, "FFMPEG_PATH", "ffmpeg")
+    if ffmpeg_path != "ffmpeg" and os.path.exists(ffmpeg_path):
+        return True
+    if shutil.which("ffmpeg"):
+        return True
+    return False
 
 
 class VideoDownloader:
@@ -14,7 +40,7 @@ class VideoDownloader:
         "local": "local",
     }
 
-    RESOLUTION_MAP = {
+    RESOLUTION_MAP_WITH_FFMPEG = {
         "2160p": "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
         "1440p": "bestvideo[height<=1440]+bestaudio/best[height<=1440]",
         "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
@@ -23,9 +49,23 @@ class VideoDownloader:
         "360p": "bestvideo[height<=360]+bestaudio/best[height<=360]",
     }
 
+    RESOLUTION_MAP_WITHOUT_FFMPEG = {
+        "2160p": "best[height<=2160]",
+        "1440p": "best[height<=1440]",
+        "1080p": "best[height<=1080]",
+        "720p": "best[height<=720]",
+        "480p": "best[height<=480]",
+        "360p": "best[height<=360]",
+    }
+
     def __init__(self, download_dir: Optional[str] = None):
         self.download_dir = download_dir or settings.DOWNLOAD_DIR
         os.makedirs(self.download_dir, exist_ok=True)
+        self.has_ffmpeg = check_ffmpeg()
+        if not self.has_ffmpeg:
+            logger.warning("未检测到 ffmpeg，将使用单文件格式下载（画质可能较低）")
+        else:
+            logger.info("检测到 ffmpeg，将使用最佳画质合并下载")
 
     def detect_platform(self, url: str) -> str:
         url_lower = url.lower()
@@ -39,16 +79,24 @@ class VideoDownloader:
             return "unknown"
 
     def _get_format(self, resolution: str) -> str:
-        return self.RESOLUTION_MAP.get(resolution, self.RESOLUTION_MAP["1080p"])
+        if self.has_ffmpeg:
+            return self.RESOLUTION_MAP_WITH_FFMPEG.get(
+                resolution, self.RESOLUTION_MAP_WITH_FFMPEG["1080p"]
+            )
+        else:
+            return self.RESOLUTION_MAP_WITHOUT_FFMPEG.get(
+                resolution, self.RESOLUTION_MAP_WITHOUT_FFMPEG["1080p"]
+            )
 
     def _build_ydl_opts(
         self,
         resolution: str,
         progress_hook: Optional[Callable] = None,
+        outtmpl: Optional[str] = None,
     ) -> Dict[str, Any]:
         opts = {
             "format": self._get_format(resolution),
-            "outtmpl": os.path.join(self.download_dir, "%(id)s.%(ext)s"),
+            "outtmpl": outtmpl or os.path.join(self.download_dir, "%(title).150B.%(ext)s"),
             "noplaylist": True,
             "quiet": False,
             "no_warnings": False,
@@ -57,7 +105,11 @@ class VideoDownloader:
             "retries": 3,
             "fragment_retries": 3,
             "concurrent_fragment_downloads": 4,
+            "extractor_retries": 3,
         }
+        ffmpeg_path = getattr(settings, "FFMPEG_PATH", "ffmpeg")
+        if ffmpeg_path != "ffmpeg" and os.path.exists(ffmpeg_path):
+            opts["ffmpeg_location"] = ffmpeg_path
         if progress_hook:
             opts["progress_hooks"] = [progress_hook]
         return opts
@@ -108,28 +160,65 @@ class VideoDownloader:
                 }
                 progress_callback(progress_data)
 
-        try:
-            ydl_opts = self._build_ydl_opts(resolution, progress_hook)
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                file_path = ydl.prepare_filename(info)
-                
-                result["success"] = True
-                result["file_path"] = file_path
-                result["title"] = info.get("title")
-                result["duration"] = info.get("duration")
-                result["file_size"] = info.get("filesize") or info.get("filesize_approx")
-                
-                if info.get("height"):
-                    result["resolution"] = f"{info['height']}p"
+        def _do_download(use_ffmpeg: bool = True):
+            if not use_ffmpeg:
+                original_ffmpeg = self.has_ffmpeg
+                self.has_ffmpeg = False
+            try:
+                ydl_opts = self._build_ydl_opts(resolution, progress_hook)
+                logger.info(f"开始下载视频: {url}, 分辨率: {resolution}")
+                logger.info(f"使用格式: {ydl_opts['format']}")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    file_path = ydl.prepare_filename(info)
 
-        except yt_dlp.utils.DownloadError as e:
-            result["error"] = f"下载失败: {str(e)}"
-        except yt_dlp.utils.ExtractorError as e:
-            result["error"] = f"提取失败: {str(e)}"
-        except Exception as e:
-            result["error"] = f"未知错误: {str(e)}"
+                    title = info.get("title", "")
+                    clean_name = sanitize_filename(title)
+                    if clean_name and os.path.exists(file_path):
+                        ext = os.path.splitext(file_path)[1]
+                        new_path = os.path.join(self.download_dir, clean_name + ext)
+                        if new_path != file_path:
+                            try:
+                                if os.path.exists(new_path):
+                                    os.remove(new_path)
+                                os.rename(file_path, new_path)
+                                file_path = new_path
+                            except Exception as e:
+                                logger.warning(f"重命名文件失败: {e}")
 
+                    result["success"] = True
+                    result["file_path"] = file_path
+                    result["title"] = title
+                    result["duration"] = info.get("duration")
+                    result["file_size"] = info.get("filesize") or info.get("filesize_approx")
+
+                    if info.get("height"):
+                        result["resolution"] = f"{info['height']}p"
+
+                    logger.info(f"下载成功: {result['title']}, 文件: {file_path}")
+                    return True
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e)
+                logger.error(f"下载失败: {error_msg}")
+                if use_ffmpeg and "ffmpeg" in error_msg.lower():
+                    logger.warning("ffmpeg 相关错误，尝试降级到单文件格式重试")
+                    if _do_download(use_ffmpeg=False):
+                        return True
+                result["error"] = f"下载失败: {error_msg}"
+            except yt_dlp.utils.ExtractorError as e:
+                error_msg = str(e)
+                logger.error(f"提取失败: {error_msg}")
+                result["error"] = f"提取失败: {error_msg}"
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"未知错误: {error_msg}", exc_info=True)
+                result["error"] = f"未知错误: {error_msg}"
+            finally:
+                if not use_ffmpeg:
+                    self.has_ffmpeg = original_ffmpeg
+            return False
+
+        _do_download(use_ffmpeg=True)
         return result
 
 
