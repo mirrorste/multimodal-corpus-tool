@@ -58,10 +58,13 @@ class VideoDownloader:
         "360p": "best[height<=360]",
     }
 
-    def __init__(self, download_dir: Optional[str] = None):
+    def __init__(self, download_dir: Optional[str] = None, cookies_file: Optional[str] = None):
         self.download_dir = download_dir or settings.DOWNLOAD_DIR
         os.makedirs(self.download_dir, exist_ok=True)
         self.has_ffmpeg = check_ffmpeg()
+        self.cookies_file = cookies_file or getattr(settings, "COOKIES_FILE", None)
+        if self.cookies_file and os.path.exists(self.cookies_file):
+            logger.info(f"使用 cookies 文件: {self.cookies_file}")
         if not self.has_ffmpeg:
             logger.warning("未检测到 ffmpeg，将使用单文件格式下载（画质可能较低）")
         else:
@@ -107,6 +110,8 @@ class VideoDownloader:
             "concurrent_fragment_downloads": 4,
             "extractor_retries": 3,
         }
+        if self.cookies_file and os.path.exists(self.cookies_file):
+            opts["cookiefile"] = self.cookies_file
         ffmpeg_path = getattr(settings, "FFMPEG_PATH", "ffmpeg")
         if ffmpeg_path != "ffmpeg" and os.path.exists(ffmpeg_path):
             opts["ffmpeg_location"] = ffmpeg_path
@@ -222,4 +227,21 @@ class VideoDownloader:
         return result
 
 
-downloader = VideoDownloader()
+def _get_cookies_file():
+    import os
+    import json
+    from pathlib import Path
+    settings_file = Path(__file__).parent.parent.parent / "data" / "settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                cookies_path = settings.get("cookies", {}).get("cookies_file")
+                if cookies_path and os.path.exists(cookies_path):
+                    return cookies_path
+        except:
+            pass
+    return None
+
+
+downloader = VideoDownloader(cookies_file=_get_cookies_file())
