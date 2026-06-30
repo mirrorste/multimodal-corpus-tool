@@ -1,9 +1,12 @@
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import videos, tasks, corpus, annotations
+from app.api.v1 import videos, tasks, corpus, annotations, settings as app_settings
 
 
 @asynccontextmanager
@@ -33,13 +36,23 @@ app.include_router(videos.router, prefix="/api/v1/videos", tags=["videos"])
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(corpus.router, prefix="/api/v1/corpus", tags=["corpus"])
 app.include_router(annotations.router, prefix="/api/v1/annotations", tags=["annotations"])
-
-
-@app.get("/")
-async def root():
-    return {"message": "多模态语料获取工具 API", "version": settings.PROJECT_VERSION}
+app.include_router(app_settings.router, tags=["settings"])
 
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+def _get_ui_dir() -> Path:
+    env_ui = os.environ.get("UI_DIR")
+    if env_ui:
+        return Path(env_ui)
+    if getattr(__import__("sys"), "frozen", False):
+        return Path(getattr(__import__("sys"), "_MEIPASS", Path(__import__("sys").executable).parent / "_internal")) / "ui"
+    return Path(__file__).parent.parent.parent / "ui"
+
+
+_ui_dir = _get_ui_dir()
+if _ui_dir.exists() and _ui_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(_ui_dir), html=True), name="ui")

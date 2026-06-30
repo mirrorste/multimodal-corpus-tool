@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频下载工具</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            font-size: 13px;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .titlebar {
+            background: linear-gradient(135deg, #4a6cf7 0%, #6c5ce7 100%);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            -webkit-app-region: drag;
+            user-select: none;
+        }
+        .titlebar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .titlebar-icon {
+            font-size: 20px;
+        }
+        .titlebar-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .titlebar-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 12px;
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #52c41a;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .toolbar {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tool-btn {
+            padding: 6px 14px;
+            border: 1px solid #d9d9d9;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        .tool-btn:hover {
+            border-color: #4a6cf7;
+            color: #4a6cf7;
+            background: #f0f3ff;
+        }
+        .tool-btn:active {
+            transform: translateY(1px);
+        }
+        .tool-btn.primary {
+            background: #4a6cf7;
+            border-color: #4a6cf7;
+            color: white;
+        }
+        .tool-btn.primary:hover {
+            background: #3a5ce7;
+            border-color: #3a5ce7;
+            color: white;
+        }
+        .tool-btn.danger {
+            color: #ff4d4f;
+        }
+        .tool-btn.danger:hover {
+            border-color: #ff4d4f;
+            background: #fff1f0;
+            color: #ff4d4f;
+        }
+        .tool-divider {
+            width: 1px;
+            height: 20px;
+            background: #e0e0e0;
+            margin: 0 4px;
+        }
+        .tool-search {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tool-search input {
+            padding: 5px 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 12px;
+            width: 200px;
+        }
+        .tool-search input:focus {
+            outline: none;
+            border-color: #4a6cf7;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-section {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .sidebar-title {
+            font-size: 12px;
+            color: #999;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+        .form-label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: #4a6cf7;
+            box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.1);
+        }
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Consolas', monospace;
+        }
+        .btn {
+            padding: 7px 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        .btn:active { transform: translateY(0); }
+        .btn-block { width: 100%; justify-content: center; }
+        .btn-primary { background: #4a6cf7; color: white; }
+        .btn-primary:hover { background: #3a5ce7; }
+        .btn-success { background: #52c41a; color: white; }
+        .btn-success:hover { background: #3db30a; }
+        .btn-warning { background: #faad14; color: white; }
+        .btn-warning:hover { background: #e89a00; }
+        .btn-danger { background: #ff4d4f; color: white; }
+        .btn-danger:hover { background: #e83b3d; }
+        .btn-default { background: #f0f0f0; color: #333; }
+        .btn-default:hover { background: #e0e0e0; }
+        .btn-sm { padding: 4px 10px; font-size: 11px; }
+        .filter-tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-radius: 4px;
+            padding: 2px;
+        }
+        .filter-tab {
+            flex: 1;
+            padding: 5px 8px;
+            text-align: center;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            color: #666;
+        }
+        .filter-tab:hover { background: #e8e8e8; }
+        .filter-tab.active {
+            background: white;
+            color: #4a6cf7;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: 600;
+        }
+        .video-list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f5f5f5;
+        }
+        .video-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+        .video-count {
+            font-size: 12px;
+            color: #888;
+        }
+        .batch-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #fff9e6;
+            border: 1px solid #ffe58f;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .batch-bar button {
+            padding: 4px 10px;
+            font-size: 11px;
+        }
+        .batch-bar .selected-count {
+            color: #fa8c16;
+            font-weight: 600;
+        }
+        .video-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .video-card:hover {
+            border-color: #4a6cf7;
+            box-shadow: 0 2px 8px rgba(74, 108, 247, 0.15);
+        }
+        .video-card.selected {
+            border-color: #4a6cf7;
+            background: #f0f3ff;
+        }
+        .video-card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .video-checkbox {
+            margin-top: 2px;
+            cursor: pointer;
+        }
+        .video-title {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1a1a2e;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+        .status-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .status-pending { background: #e6f7ff; color: #1890ff; }
+        .status-queued { background: #fff7e6; color: #fa8c16; }
+        .status-downloading { background: #e6fffb; color: #13c2c2; }
+        .status-completed { background: #f6ffed; color: #52c41a; }
+        .status-failed { background: #fff1f0; color: #ff4d4f; }
+        .status-cancelled { background: #f5f5f5; color: #8c8c8c; }
+        .status-processing { background: #e6f7ff; color: #1890ff; }
+        .video-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .video-meta span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .video-progress {
+            margin: 6px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4a6cf7, #6c5ce7);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+        .video-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #f0f0f0;
+        }
+        .video-actions .btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            flex: 1;
+            justify-content: center;
+        }
+        .error-msg {
+            font-size: 11px;
+            color: #ff4d4f;
+            margin-top: 6px;
+            padding: 4px 8px;
+            background: #fff1f0;
+            border-radius: 4px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #bbb;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+        .empty-state-text {
+            font-size: 13px;
+        }
+        .detail-panel {
+            width: 320px;
+            background: white;
+            border-left: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .detail-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .detail-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+        }
+        .detail-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .detail-close:hover {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .detail-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .detail-info-item {
+            margin-bottom: 12px;
+        }
+        .detail-info-label {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+        .detail-info-value {
+            font-size: 13px;
+            color: #333;
+            word-break: break-all;
+        }
+        .detail-actions {
+            padding: 12px 16px;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            gap: 8px;
+        }
+        .detail-actions .btn {
+            flex: 1;
+            justify-content: center;
+        }
+        .toast {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            padding: 10px 18px;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideInRight 0.3s ease;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast.success { background: #52c41a; }
+        .toast.error { background: #ff4d4f; }
+        .toast.warning { background: #faad14; }
+        .toast.info { background: #1890ff; }
+        .footer-bar {
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            padding: 6px 16px;
+            font-size: 11px;
+            color: #999;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="titlebar">
+            <div class="titlebar-left">
+                <span class="titlebar-icon">🎬</span>
+                <span class="titlebar-title">视频下载工具</span>
+            </div>
+            <div class="titlebar-right">
+                <div class="status-indicator">
+                    <div class="status-dot" id="serverStatusDot"></div>
+                    <span id="serverStatus">就绪</span>
+                </div>
+                <span id="videoCount">0 个视频</span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button class="tool-btn primary" onclick="showAddDialog()">➕ 添加视频</button>
+            <button class="tool-btn" onclick="showBatchDialog()">📦 批量添加</button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" onclick="refreshList()">🔄 刷新</button>
+            <button class="tool-btn" onclick="openDownloadFolder()">📁 下载目录</button>
+            <div class="tool-search">
+                <input type="text" id="searchInput" placeholder="搜索视频..." oninput="onSearch(this.value)">
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="sidebar-section" style="background: #fff9e6;">
+                    <div class="sidebar-title">⚙️ 设置</div>
+                    <div class="form-group">
+                        <label class="form-label">Bilibili Cookies 文件</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="text" class="form-input" id="cookiesFile" placeholder="cookies.txt" style="flex: 1;">
+                            <button class="btn btn-sm" style="padding: 4px 8px; font-size: 11px;" onclick="selectCookiesFile()">选择</button>
+                        </div>
+                        <div style="font-size: 10px; color: #999; margin-top: 4px;">
+                            下载 Bilibili 视频需要登录状态的 cookies
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-secondary" onclick="saveCookiesConfig()" style="margin-top: 6px; width: 100%;">保存设置</button>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">快速添加</div>
+                    <div class="form-group">
+                        <label class="form-label">视频链接</label>
+                        <input type="text" class="form-input" id="quickUrl" placeholder="https://www.youtube.com/watch?v=...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">分辨率</label>
+                        <select class="form-select" id="quickResolution">
+                            <option value="360p">360p</option>
+                            <option value="480p">480p</option>
+                            <option value="720p">720p</option>
+                            <option value="1080p" selected>1080p</option>
+                            <option value="1440p">1440p (2K)</option>
+                            <option value="2160p">2160p (4K)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="quickAddVideo()">📥 添加到列表</button>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">状态筛选</div>
+                    <div class="filter-tabs">
+                        <div class="filter-tab active" data-filter="" onclick="setFilter('')">全部</div>
+                        <div class="filter-tab" data-filter="pending" onclick="setFilter('pending')">待处理</div>
+                        <div class="filter-tab" data-filter="downloading" onclick="setFilter('downloading')">下载中</div>
+                    </div>
+                    <div class="filter-tabs" style="margin-top: 6px;">
+                        <div class="filter-tab" data-filter="completed" onclick="setFilter('completed')">已完成</div>
+                        <div class="filter-tab" data-filter="failed" onclick="setFilter('failed')">失败</div>
+                        <div class="filter-tab" data-filter="cancelled" onclick="setFilter('cancelled')">已取消</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section" style="flex: 1; overflow-y: auto;">
+                    <div class="sidebar-title">批量操作</div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px;">
+                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
+                            <span>全选当前列表</span>
+                        </label>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <button class="btn btn-primary btn-sm btn-block" onclick="batchDownload()">▶️ 批量下载</button>
+                        <button class="btn btn-warning btn-sm btn-block" onclick="batchCancel()">⏹️ 批量取消</button>
+                        <button class="btn btn-danger btn-sm btn-block" onclick="batchDelete()">🗑️ 批量删除</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="video-list-container" id="videoListContainer">
+                <div class="video-list-header">
+                    <span class="video-count" id="listCount">共 0 个视频</span>
+                    <span style="font-size: 11px; color: #aaa;" id="lastUpdate">--</span>
+                </div>
+                <div id="videoList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-text">暂无视频任务</div>
+                        <div style="font-size: 11px; margin-top: 6px;">在左侧添加视频链接开始下载</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-panel hidden" id="detailPanel">
+                <div class="detail-header">
+                    <span class="detail-title">视频详情</span>
+                    <button class="detail-close" onclick="closeDetail()">×</button>
+                </div>
+                <div class="detail-body" id="detailBody">
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-primary btn-sm" onclick="detailAction('download')">下载</button>
+                    <button class="btn btn-warning btn-sm" onclick="detailAction('cancel')">取消</button>
+                    <button class="btn btn-danger btn-sm" onclick="detailAction('delete')">删除</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-bar">
+            <span>视频下载工具 v1.0.0</span>
+            <span id="footerStatus">就绪</span>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8765';
+        let currentFilter = '';
+        let searchKeyword = '';
+        let allVideos = [];
+        let selectedIds = new Set();
+        let refreshTimer = null;
+        let currentDetailId = null;
+
+        async function apiRequest(path, method = 'GET', body = null) {
+            const url = API_BASE + path;
+            const options = { method, headers: {} };
+            if (body) {
+                options.headers['Content-Type'] = 'application/json';
+                options.body = JSON.stringify(body);
+            }
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json().catch(() => ({}));
+                return { ok: response.ok, status: response.status, data };
+            } catch (error) {
+                return { ok: false, status: 0, data: { error: error.message } };
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function formatSize(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        function getStatusText(status) {
+            const map = {
+                'pending': '待处理', 'queued': '排队中', 'downloading': '下载中',
+                'processing': '处理中', 'completed': '已完成', 'failed': '失败',
+                'cancelled': '已取消'
+            };
+            return map[status] || status;
+        }
+
+        function getStatusClass(status) {
+            return 'status-' + status;
+        }
+
+        async function checkServer() {
+            const result = await apiRequest('/health');
+            const dot = document.getElementById('serverStatusDot');
+            const status = document.getElementById('serverStatus');
+            if (result.ok && result.data.status === 'healthy') {
+                dot.style.background = '#52c41a';
+                status.textContent = '服务正常';
+                return true;
+            } else {
+                dot.style.background = '#ff4d4f';
+                status.textContent = '连接失败';
+                return false;
+            }
+        }
+
+        async function refreshList() {
+            let path = '/api/v1/videos/';
+            if (currentFilter) path += '?status=' + currentFilter;
+
+            const result = await apiRequest(path);
+            if (result.ok) {
+                allVideos = result.data;
+                document.getElementById('videoCount').textContent = allVideos.length + ' 个视频';
+                document.getElementById('listCount').textContent = '共 ' + allVideos.length + ' 个视频';
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                renderVideoList();
+            }
+        }
+
+        function renderVideoList() {
+            const listEl = document.getElementById('videoList');
+            let videos = allVideos;
+
+            if (searchKeyword) {
+                const kw = searchKeyword.toLowerCase();
+                videos = videos.filter(v =>
+                    (v.title && v.title.toLowerCase().includes(kw)) ||
+                    (v.url && v.url.toLowerCase().includes(kw)) ||
+                    (v.id && v.id.toLowerCase().includes(kw))
+                );
+            }
+
+            if (videos.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-text">${searchKeyword ? '未找到匹配的视频' : '暂无视频任务'}</div>
+                    </div>`;
+                return;
+            }
+
+            listEl.innerHTML = videos.map(v => {
+                const isSelected = selectedIds.has(v.id);
+                const showProgress = v.status === 'downloading' || (v.download_progress && v.download_progress > 0 && v.status !== 'completed');
+                return `
+                <div class="video-card ${isSelected ? 'selected' : ''}" data-id="${v.id}" onclick="onVideoCardClick(event, '${v.id}')">
+                    <div class="video-card-header">
+                        <input type="checkbox" class="video-checkbox" ${isSelected ? 'checked' : ''}
+                               onclick="event.stopPropagation(); toggleSelect('${v.id}', this.checked)">
+                        <div class="video-title">${v.title || '(正在获取标题...)'}</div>
+                        <span class="status-badge ${getStatusClass(v.status)}">${getStatusText(v.status)}</span>
+                    </div>
+                    <div class="video-meta">
+                        <span>🎯 ${v.platform || 'unknown'}</span>
+                        ${v.resolution ? `<span>📺 ${v.resolution}</span>` : ''}
+                        ${v.duration ? `<span>⏱️ ${formatDuration(v.duration)}</span>` : ''}
+                        ${v.file_size ? `<span>💾 ${formatSize(v.file_size)}</span>` : ''}
+                    </div>
+                    ${showProgress ? `
+                    <div class="video-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width:${v.download_progress || 0}%"></div>
+                        </div>
+                        <div class="progress-info">
+                            <span>${(v.download_progress || 0).toFixed(1)}%</span>
+                            ${v.downloaded_bytes ? `<span>${formatSize(v.downloaded_bytes)} / ${formatSize(v.total_bytes || v.file_size || 0)}</span>` : ''}
+                        </div>
+                    </div>` : ''}
+                    ${v.error_message ? `<div class="error-msg">⚠️ ${escapeHtml(v.error_message.substring(0, 80))}</div>` : ''}
+                    <div class="video-actions">
+                        ${v.status === 'pending' || v.status === 'queued' || v.status === 'failed' || v.status === 'cancelled'
+                            ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startDownload('${v.id}')">▶️ 下载</button>`
+                            : v.status === 'downloading' || v.status === 'processing'
+                                ? `<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); cancelTask('${v.id}')">⏹️ 取消</button>`
+                                : `<button class="btn btn-default btn-sm" onclick="event.stopPropagation(); startDownload('${v.id}')">🔄 重新下载</button>`
+                        }
+                        <button class="btn btn-default btn-sm" onclick="event.stopPropagation(); showDetail('${v.id}')">📋 详情</button>
+                        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteVideo('${v.id}')">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '--';
+            if (seconds < 60) return seconds + '秒';
+            if (seconds < 3600) return Math.floor(seconds / 60) + '分' + (seconds % 60) + '秒';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return h + '时' + m + '分';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Bilibili Cookies 设置
+        function selectCookiesFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.txt';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    document.getElementById('cookiesFile').value = file.name;
+                }
+            };
+            input.click();
+        }
+
+        async function saveCookiesConfig() {
+            const cookiesFile = document.getElementById('cookiesFile').value.trim();
+            if (!cookiesFile) {
+                showToast('请选择 Cookies 文件', 'warning');
+                return;
+            }
+            // 保存到本地存储
+            localStorage.setItem('bilibili_cookies', cookiesFile);
+            // 发送到后端
+            await apiRequest('/api/v1/settings/cookies', 'POST', { cookies_file: cookiesFile });
+            showToast('Cookies 设置已保存', 'success');
+        }
+
+        async function loadCookiesConfig() {
+            // 从本地存储加载
+            const saved = localStorage.getItem('bilibili_cookies');
+            if (saved) {
+                document.getElementById('cookiesFile').value = saved;
+            }
+            // 从后端获取
+            try {
+                const settings = await apiRequest('/api/v1/settings/cookies', 'GET');
+                if (settings && settings.cookies_file) {
+                    document.getElementById('cookiesFile').value = settings.cookies_file;
+                    localStorage.setItem('bilibili_cookies', settings.cookies_file);
+                }
+            } catch (e) {
+                // 后端没有返回设置，使用本地存储
+            }
+        }
+
+        async function quickAddVideo() {
+            const url = document.getElementById('quickUrl').value.trim();
+            const resolution = document.getElementById('quickResolution').value;
+            if (!url) {
+                showToast('请输入视频链接', 'warning');
+                return;
+            }
+
+            let platform = 'youtube';
+            if (url.includes('bilibili.com') || url.includes('b23.tv')) platform = 'bilibili';
+            else if (url.includes('vimeo.com')) platform = 'vimeo';
+
+            const result = await apiRequest('/api/v1/videos/', 'POST', {
+                url, platform, preferred_resolution: resolution
+            });
+
+            if (result.ok) {
+                showToast('✅ 添加成功', 'success');
+                document.getElementById('quickUrl').value = '';
+                refreshList();
+                startAutoRefresh();
+            } else {
+                showToast('❌ 添加失败: ' + (result.data.detail || result.data.error || '未知错误'), 'error');
+            }
+        }
+
+        async function startDownload(id) {
+            const result = await apiRequest('/api/v1/videos/' + id + '/download', 'POST');
+            if (result.ok) {
+                showToast('✅ 下载已启动', 'success');
+                refreshList();
+                startAutoRefresh();
+            } else {
+                showToast('❌ 启动失败', 'error');
+            }
+        }
+
+        async function cancelTask(id) {
+            const result = await apiRequest('/api/v1/tasks/' + id + '/cancel', 'POST');
+            if (result.ok) {
+                showToast('✅ 已取消', 'success');
+                refreshList();
+            } else {
+                showToast('❌ 取消失败', 'error');
+            }
+        }
+
+        async function deleteVideo(id) {
+            if (!confirm('确定要删除这个视频吗？')) return;
+            const result = await apiRequest('/api/v1/videos/' + id, 'DELETE');
+            if (result.ok) {
+                showToast('✅ 已删除', 'success');
+                selectedIds.delete(id);
+                if (currentDetailId === id) closeDetail();
+                refreshList();
+            } else {
+                showToast('❌ 删除失败', 'error');
+            }
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.filter === filter);
+            });
+            refreshList();
+        }
+
+        function onSearch(keyword) {
+            searchKeyword = keyword.trim();
+            renderVideoList();
+        }
+
+        function toggleSelect(id, checked) {
+            if (checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+            const card = document.querySelector(`.video-card[data-id="${id}"]`);
+            if (card) card.classList.toggle('selected', checked);
+            updateSelectAllState();
+        }
+
+        function toggleSelectAll(checkbox) {
+            const visibleCards = document.querySelectorAll('.video-card');
+            visibleCards.forEach(card => {
+                const id = card.dataset.id;
+                if (checkbox.checked) selectedIds.add(id);
+                else selectedIds.delete(id);
+                card.classList.toggle('selected', checkbox.checked);
+                const cb = card.querySelector('.video-checkbox');
+                if (cb) cb.checked = checkbox.checked;
+            });
+        }
+
+        function updateSelectAllState() {
+            const visibleCards = document.querySelectorAll('.video-card');
+            const selectAll = document.getElementById('selectAll');
+            if (visibleCards.length === 0) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            } else {
+                let selectedCount = 0;
+                visibleCards.forEach(card => {
+                    if (selectedIds.has(card.dataset.id)) selectedCount++;
+                });
+                selectAll.checked = selectedCount === visibleCards.length;
+                selectAll.indeterminate = selectedCount > 0 && selectedCount < visibleCards.length;
+            }
+        }
+
+        function onVideoCardClick(event, id) {
+            showDetail(id);
+        }
+
+        async function showDetail(id) {
+            currentDetailId = id;
+            const panel = document.getElementById('detailPanel');
+            const body = document.getElementById('detailBody');
+            panel.classList.remove('hidden');
+
+            body.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
+
+            const result = await apiRequest('/api/v1/videos/' + id);
+            if (result.ok) {
+                const v = result.data;
+                body.innerHTML = `
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">标题</div>
+                        <div class="detail-info-value" style="font-weight:600;">${v.title || '(无)'}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">状态</div>
+                        <div class="detail-info-value"><span class="status-badge ${getStatusClass(v.status)}">${getStatusText(v.status)}</span></div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">平台</div>
+                        <div class="detail-info-value">${v.platform || '-'}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">分辨率</div>
+                        <div class="detail-info-value">${v.resolution || '-'}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">文件大小</div>
+                        <div class="detail-info-value">${v.file_size ? formatSize(v.file_size) : '-'}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">时长</div>
+                        <div class="detail-info-value">${v.duration ? formatDuration(v.duration) : '-'}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">下载进度</div>
+                        <div class="detail-info-value">${(v.download_progress || 0).toFixed(1)}%</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">视频ID</div>
+                        <div class="detail-info-value" style="font-size:11px;word-break:break-all;">${v.id}</div>
+                    </div>
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">URL</div>
+                        <div class="detail-info-value" style="font-size:11px;word-break:break-all;">${v.url || '-'}</div>
+                    </div>
+                    ${v.error_message ? `
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">错误信息</div>
+                        <div class="detail-info-value" style="color:#ff4d4f;font-size:12px;">${escapeHtml(v.error_message)}</div>
+                    </div>` : ''}
+                    <div class="detail-info-item">
+                        <div class="detail-info-label">创建时间</div>
+                        <div class="detail-info-value" style="font-size:12px;">${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</div>
+                    </div>
+                `;
+            } else {
+                body.innerHTML = '<div style="text-align:center;color:#ff4d4f;padding:20px;">加载失败</div>';
+            }
+        }
+
+        function closeDetail() {
+            document.getElementById('detailPanel').classList.add('hidden');
+            currentDetailId = null;
+        }
+
+        function detailAction(action) {
+            if (!currentDetailId) return;
+            if (action === 'download') startDownload(currentDetailId);
+            else if (action === 'cancel') cancelTask(currentDetailId);
+            else if (action === 'delete') deleteVideo(currentDetailId);
+        }
+
+        async function batchDownload() {
+            const ids = Array.from(selectedIds);
+            if (ids.length === 0) {
+                showToast('请先选择视频', 'warning');
+                return;
+            }
+            if (!confirm(`确定要下载选中的 ${ids.length} 个视频吗？`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch/download', 'POST', ids);
+            if (result.ok) {
+                showToast(`✅ 已启动 ${ids.length} 个下载任务`, 'success');
+                refreshList();
+                startAutoRefresh();
+            } else {
+                showToast('❌ 操作失败', 'error');
+            }
+        }
+
+        async function batchCancel() {
+            const ids = Array.from(selectedIds);
+            if (ids.length === 0) {
+                showToast('请先选择视频', 'warning');
+                return;
+            }
+            if (!confirm(`确定要取消选中的 ${ids.length} 个任务吗？`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch/cancel', 'POST', ids);
+            if (result.ok) {
+                showToast('✅ 已取消', 'success');
+                refreshList();
+            } else {
+                showToast('❌ 操作失败', 'error');
+            }
+        }
+
+        async function batchDelete() {
+            const ids = Array.from(selectedIds);
+            if (ids.length === 0) {
+                showToast('请先选择视频', 'warning');
+                return;
+            }
+            if (!confirm(`确定要删除选中的 ${ids.length} 个视频吗？此操作不可恢复！`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch', 'DELETE', ids);
+            if (result.ok) {
+                showToast('✅ 已删除', 'success');
+                selectedIds.clear();
+                refreshList();
+            } else {
+                showToast('❌ 操作失败', 'error');
+            }
+        }
+
+        function showAddDialog() {
+            document.getElementById('quickUrl').focus();
+            showToast('请在左侧输入视频链接', 'info');
+        }
+
+        function showBatchDialog() {
+            const urls = prompt('请输入视频链接（每行一个）：');
+            if (!urls) return;
+
+            const urlList = urls.split('\n').map(u => u.trim()).filter(u => u);
+            if (urlList.length === 0) {
+                showToast('没有有效的链接', 'warning');
+                return;
+            }
+
+            const videos = urlList.map(url => {
+                let platform = 'youtube';
+                if (url.includes('bilibili.com') || url.includes('b23.tv')) platform = 'bilibili';
+                else if (url.includes('vimeo.com')) platform = 'vimeo';
+                return { url, platform, preferred_resolution: '1080p' };
+            });
+
+            apiRequest('/api/v1/videos/batch', 'POST', videos).then(result => {
+                if (result.ok) {
+                    showToast(`✅ 批量添加成功，共 ${result.data.length} 个`, 'success');
+                    refreshList();
+                    startAutoRefresh();
+                } else {
+                    showToast('❌ 批量添加失败', 'error');
+                }
+            });
+        }
+
+        function openDownloadFolder() {
+            showToast('下载目录位于软件目录/data/downloads', 'info');
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            let count = 0;
+            refreshTimer = setInterval(() => {
+                refreshList();
+                count++;
+                if (count > 120) {
+                    clearInterval(refreshTimer);
+                    refreshTimer = null;
+                }
+            }, 2000);
+        }
+
+        window.onload = function() {
+            checkServer();
+            refreshList();
+            loadCookiesConfig();
+            setInterval(checkServer, 10000);
+
+            document.getElementById('quickUrl').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') quickAddVideo();
+            });
+        };
+    </script>
+</body>
+</html>

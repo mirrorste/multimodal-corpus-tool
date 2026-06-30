@@ -131,6 +131,25 @@
         .result-box.success { border-color: #b7eb8f; background: #f6ffed; }
         .result-box.error { border-color: #ffa39e; background: #fff1f0; }
         .result-box.info { border-color: #91d5ff; background: #e6f7ff; }
+        .batch-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: #f9f9ff;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .batch-actions button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-sm {
+            padding: 4px 12px;
+            font-size: 12px;
+        }
         .video-list {
             max-height: 400px;
             overflow-y: auto;
@@ -372,6 +391,16 @@
                     <button class="quick-btn" onclick="filterByStatus('downloading')">下载中</button>
                     <button class="quick-btn" onclick="filterByStatus('completed')">已完成</button>
                     <button class="quick-btn" onclick="filterByStatus('failed')">失败</button>
+                </div>
+                <div class="batch-actions">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="selectAllVideos" onchange="toggleSelectAll(this)">
+                        <span style="font-size:13px;">全选</span>
+                    </label>
+                    <span style="font-size:12px;color:#888;">已选 <span id="selectedCount">0</span> 项</span>
+                    <button class="btn btn-primary btn-sm" onclick="batchDownload()" disabled>▶️ 批量下载</button>
+                    <button class="btn btn-warning btn-sm" onclick="batchCancel()" disabled>⏹️ 批量取消</button>
+                    <button class="btn btn-danger btn-sm" onclick="batchDelete()" disabled>🗑️ 批量删除</button>
                 </div>
                 <div class="video-list" id="videoList">
                     <p style="text-align:center;color:#999;padding:30px;">点击刷新按钮加载视频列表</p>
@@ -708,7 +737,10 @@ https://vimeo.com/xxx"></textarea>
                 listEl.innerHTML = videos.map(v => `
                     <div class="video-item" id="video-${v.id}">
                         <div class="video-item-header">
-                            <div class="video-title">${v.title || '(无标题)'}</div>
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" class="video-checkbox" value="${v.id}" onchange="updateSelectedCount()">
+                                <div class="video-title">${v.title || '(无标题)'}</div>
+                            </label>
                             <span class="status-tag ${getStatusClass(v.status)}">${getStatusText(v.status)}</span>
                         </div>
                         <div class="video-meta">
@@ -716,13 +748,13 @@ https://vimeo.com/xxx"></textarea>
                             <span>🎯 ${v.platform}</span>
                             ${v.resolution ? `<span>📺 ${v.resolution}</span>` : ''}
                             ${v.duration ? `<span>⏱️ ${v.duration}秒</span>` : ''}
-                            ${v.file_size ? `<span>💾 ${v.file_size.toFixed(1)}MB</span>` : ''}
+                            ${v.file_size ? `<span>💾 ${formatSize(v.file_size)}</span>` : ''}
                         </div>
                         ${(v.status === 'downloading' || v.download_progress > 0) ? `
                             <div class="progress-bar">
                                 <div class="progress-fill" style="width:${v.download_progress || 0}%"></div>
                             </div>
-                            <div class="progress-text">进度: ${(v.download_progress || 0).toFixed(1)}% ${v.downloaded_bytes ? `(${formatSize(v.downloaded_bytes * 1024 * 1024)} / ${formatSize(v.total_bytes * 1024 * 1024)})` : ''}</div>
+                            <div class="progress-text">进度: ${(v.download_progress || 0).toFixed(1)}% ${v.downloaded_bytes ? `(${formatSize(v.downloaded_bytes)} / ${formatSize(v.total_bytes)})` : ''}</div>
                         ` : ''}
                         ${v.error_message ? `<div style="color:#ff4d4f;font-size:12px;margin-top:6px;">错误: ${v.error_message.substring(0, 100)}</div>` : ''}
                         <div class="video-actions" style="margin-top: 10px;">
@@ -736,6 +768,7 @@ https://vimeo.com/xxx"></textarea>
             } else {
                 listEl.innerHTML = '<p style="text-align:center;color:#ff4d4f;padding:30px;">加载失败，请检查服务连接</p>';
             }
+            updateSelectedCount();
         }
 
         function filterByStatus(status) {
@@ -832,6 +865,92 @@ https://vimeo.com/xxx"></textarea>
             } else {
                 showResult('actionResult', result.data, 'error');
                 showToast('❌ 删除失败', 'error');
+            }
+        }
+
+        function getSelectedVideoIds() {
+            const checkboxes = document.querySelectorAll('.video-checkbox:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function updateSelectedCount() {
+            const ids = getSelectedVideoIds();
+            const count = ids.length;
+            document.getElementById('selectedCount').textContent = count;
+
+            const batchBtns = document.querySelectorAll('.batch-actions button');
+            batchBtns.forEach(btn => {
+                btn.disabled = count === 0;
+            });
+
+            const allCheckboxes = document.querySelectorAll('.video-checkbox');
+            const selectAll = document.getElementById('selectAllVideos');
+            if (allCheckboxes.length > 0) {
+                selectAll.checked = count === allCheckboxes.length;
+                selectAll.indeterminate = count > 0 && count < allCheckboxes.length;
+            } else {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+        }
+
+        function toggleSelectAll(checkbox) {
+            const checkboxes = document.querySelectorAll('.video-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+            });
+            updateSelectedCount();
+        }
+
+        async function batchDownload() {
+            const ids = getSelectedVideoIds();
+            if (ids.length === 0) { showToast('请先选择视频', 'warning'); return; }
+
+            if (!confirm(`确定要批量下载选中的 ${ids.length} 个视频吗？`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch/download', 'POST', ids);
+            if (result.ok) {
+                showResult('actionResult', result.data, 'success');
+                showToast(`✅ ${result.data.message}`, 'success');
+                refreshVideoList();
+                startAutoRefresh();
+            } else {
+                showResult('actionResult', result.data, 'error');
+                showToast('❌ 批量下载失败', 'error');
+            }
+        }
+
+        async function batchCancel() {
+            const ids = getSelectedVideoIds();
+            if (ids.length === 0) { showToast('请先选择视频', 'warning'); return; }
+
+            if (!confirm(`确定要批量取消选中的 ${ids.length} 个任务吗？`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch/cancel', 'POST', ids);
+            if (result.ok) {
+                showResult('actionResult', result.data, 'success');
+                showToast(`✅ ${result.data.message}`, 'success');
+                refreshVideoList();
+            } else {
+                showResult('actionResult', result.data, 'error');
+                showToast('❌ 批量取消失败', 'error');
+            }
+        }
+
+        async function batchDelete() {
+            const ids = getSelectedVideoIds();
+            if (ids.length === 0) { showToast('请先选择视频', 'warning'); return; }
+
+            if (!confirm(`确定要批量删除选中的 ${ids.length} 个视频吗？此操作不可恢复！`)) return;
+
+            const result = await apiRequest('/api/v1/videos/batch', 'DELETE', ids);
+            if (result.ok) {
+                showResult('actionResult', result.data, 'success');
+                showToast(`✅ ${result.data.message}`, 'success');
+                refreshVideoList();
+            } else {
+                showResult('actionResult', result.data, 'error');
+                showToast('❌ 批量删除失败', 'error');
             }
         }
 

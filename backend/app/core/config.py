@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     DOWNLOAD_DIR: str = "./downloads"
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE: int = 2048  # MB
+    DB_PATH: str = "./multimodal_corpus.db"
 
     # Testing mode: use SQLite instead of PostgreSQL
     USE_SQLITE: bool = False
@@ -35,7 +36,8 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         if self.USE_SQLITE:
-            return "sqlite+aiosqlite:///./test_multimodal_corpus.db"
+            db_path = self.DB_PATH.replace("\\", "/")
+            return f"sqlite+aiosqlite:///{db_path}"
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
