@@ -1,5 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, JSON
 from app.core.database import Base
 import uuid
 from datetime import datetime

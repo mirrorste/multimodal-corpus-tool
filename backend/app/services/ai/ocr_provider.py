@@ -1,11 +1,21 @@
 """OCR 提供方 - 支持本地 PaddleOCR 和云端 API"""
 import os
 import httpx
+import io
 from typing import Optional, Dict, Any, List
-from PIL import Image
 import logging
 
 logger = logging.getLogger(__name__)
+
+# 可选依赖
+try:
+    from PIL import Image, ImageEnhance
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+    Image = None
+    ImageEnhance = None
+    logger.warning("Pillow 未安装，OCR 图片预处理功能不可用")
 
 
 class OCRProvider:
@@ -44,16 +54,20 @@ class OCRProvider:
         return self.local_available or self.config is not None
 
     def _image_to_bytes(self, image_path: str) -> bytes:
-        """获取图片字节"""
-        with Image.open(image_path) as img:
-            # 预处理：增强对比度
-            from PIL import ImageEnhance
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(1.2)
+        """获取图片字节（带可选预处理）"""
+        if _PIL_AVAILABLE and Image and ImageEnhance:
+            with Image.open(image_path) as img:
+                # 预处理：增强对比度
+                enhancer = ImageEnhance.Contrast(img)
+                img = enhancer.enhance(1.2)
 
-            buffer = __import__("io").BytesIO()
-            img.save(buffer, format="PNG")
-            return buffer.getvalue()
+                buffer = io.BytesIO()
+                img.save(buffer, format="PNG")
+                return buffer.getvalue()
+        else:
+            # 无 PIL 时直接读取
+            with open(image_path, "rb") as f:
+                return f.read()
 
     async def recognize(self, image_path: str) -> Dict[str, Any]:
         """

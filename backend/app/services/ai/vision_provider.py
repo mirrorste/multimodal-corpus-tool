@@ -2,12 +2,19 @@
 import os
 import httpx
 from typing import Optional, Dict, Any, List
-from PIL import Image
 import base64
 import io
 import logging
 
 logger = logging.getLogger(__name__)
+
+# 可选依赖
+try:
+    from PIL import Image
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+    logger.warning("Pillow 未安装，图片压缩功能不可用")
 
 
 class VisionProvider:
@@ -48,14 +55,19 @@ class VisionProvider:
 
     def _image_to_base64(self, image_path: str) -> str:
         """图片转 base64"""
-        with Image.open(image_path) as img:
-            # 压缩图片（减少 API 传输大小）
-            if max(img.size) > 1024:
-                img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+        if _PIL_AVAILABLE:
+            with Image.open(image_path) as img:
+                # 压缩图片（减少 API 传输大小）
+                if max(img.size) > 1024:
+                    img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
 
-            buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=85)
-            return base64.b64encode(buffer.getvalue()).decode()
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=85)
+                return base64.b64encode(buffer.getvalue()).decode()
+        else:
+            # 无 PIL 时直接读取文件
+            with open(image_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
 
     async def describe_image(self, image_path: str) -> Dict[str, Any]:
         """
