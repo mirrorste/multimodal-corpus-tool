@@ -27,8 +27,17 @@ async def get_db():
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from alembic.config import Config
+    from alembic import command
+    from pathlib import Path
+
+    alembic_ini = Path(__file__).parent.parent.parent / "alembic.ini"
+    if alembic_ini.exists():
+        alembic_cfg = Config(str(alembic_ini))
+        command.upgrade(alembic_cfg, "head")
+    else:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
 
 async def drop_db():

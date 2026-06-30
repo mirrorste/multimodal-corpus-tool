@@ -2,7 +2,7 @@
 import asyncio
 import os
 import re
-from typing import Optional, Callable, Dict, Any, list
+from typing import Optional, Callable, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
@@ -45,7 +45,7 @@ class SubtitleService:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         language: Optional[str] = None,
-    ) -> list[Subtitle]:
+    ) -> List[Subtitle]:
         """获取视频的所有字幕"""
         query = select(Subtitle).where(Subtitle.video_id == video_id)
         if start_time is not None:
@@ -90,8 +90,8 @@ class SubtitleService:
         self,
         db: AsyncSession,
         video_id: str,
-        subtitles_data: list[Dict[str, Any]],
-    ) -> list[Subtitle]:
+        subtitles_data: List[Dict[str, Any]],
+    ) -> List[Subtitle]:
         """批量创建字幕记录"""
         subtitles = []
         for data in subtitles_data:
@@ -222,7 +222,7 @@ class SubtitleService:
         except Exception:
             return None
 
-    async def _parse_srt_file(self, srt_path: str) -> list[Dict[str, Any]]:
+    async def _parse_srt_file(self, srt_path: str) -> List[Dict[str, Any]]:
         """解析 SRT 字幕文件"""
         subtitles = []
         try:
@@ -380,9 +380,9 @@ class SubtitleService:
 
     def _merge_adjacent_subtitles(
         self,
-        subtitles_data: list[Dict[str, Any]],
+        subtitles_data: List[Dict[str, Any]],
         threshold: float = 1.0,  # 时间差阈值
-    ) -> list[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """合并相邻的相同字幕"""
         if not subtitles_data:
             return []
@@ -407,7 +407,7 @@ class SubtitleService:
         merged.append(current)
         return merged
 
-    def _run_ffmpeg(self, cmd: list[str]) -> None:
+    def _run_ffmpeg(self, cmd: List[str]) -> None:
         """运行 ffmpeg 命令"""
         import subprocess
         process = subprocess.run(cmd, capture_output=True, text=True)
