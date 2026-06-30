@@ -44,15 +44,16 @@
 
 ```
 backend/app/services/ai/
-├── __init__.py
-├── base.py                    # 基类和接口定义
-├── ocr_service.py             # OCR 服务
-├── asr_service.py            # ASR 服务
-├── vision_service.py          # 视觉分析服务
-├── nlp_service.py            # NLP 服务
-├── metaphor_service.py        # 隐喻识别服务
-├── untrans_service.py        # 不可译性服务
-└── llm_provider.py           # LLM 提供商
+├── __init__.py                 # 模块导出
+├── base.py                     # AI服务基类和接口定义
+├── llm_provider.py            # LLM提供商（DeepSeek/OpenAI/阿里云）
+├── vision_provider.py         # 视觉分析（YOLOv8n + 云端API）
+├── ocr_provider.py            # OCR服务（PaddleOCR + 云端API）
+└── asr_provider.py            # ASR服务（Whisper CPU模式）
+
+backend/app/services/
+├── metaphor_service.py         # 隐喻识别服务（规则引擎 + LLM）
+└── untranslatability_service.py # 不可译性服务（规则引擎 + LLM）
 ```
 
 ### 2.2 基类定义
@@ -489,226 +490,115 @@ class VisionService(AIServiceBase):
 
 ## 六、隐喻识别服务
 
+> 实际代码位置：`backend/app/services/metaphor_service.py`
+
 ### 6.1 模型选择
 
 | 方案 | 模型 | GPU | 准确性 | 费用 |
 |------|------|-----|--------|------|
 | **本地（规则）** | 关键词匹配 | ❌ | 40-50% | $0 |
-| **本地（小型模型）** | BERT-base-chinese | ⚠️ 可选 | 70-75% | $0 |
-| **API（推荐）** | GPT-4o-mini/DeepSeek | ❌ | 85-90% | ~$0.001/次 |
+| **API（推荐）** | DeepSeek/ GPT-4o-mini | ❌ | 85-90% | ~$0.001/次 |
 
-### 6.2 实现
+### 6.2 混合检测流程
 
 ```python
-# backend/app/services/ai/metaphor_service.py
+async def detect_metaphors(self, text: str, use_llm: bool = True, language: str = "zh"):
+    """混合检测：规则引擎 + LLM API"""
 
-from .base import AIServiceBase, AIResult
+    # 1. 先用规则引擎（快速，零成本）
+    rule_results = self._detect_with_rules(text)
 
+    # 2. 如果需要且可用，再用 LLM
+    if use_llm and self.is_llm_available():
+        llm_results = await self._detect_with_llm(text, language)
 
-class MetaphorService(AIServiceBase):
-    """隐喻识别服务 - 规则引擎 + LLM API"""
+    # 3. 合并结果并去重
+    return merged_results
+```
 
-    def __init__(self):
-        self.llm_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
-        self.llm_provider = self._detect_provider()
-        super().__init__()
+### 6.3 预定义隐喻模式
 
-    def _check_local_available(self) -> bool:
-        """规则引擎始终可用"""
-        return True
-
-    def _check_api_available(self) -> bool:
-        return bool(self.llm_api_key)
-
-    def _detect_provider(self) -> str:
-        if os.getenv("DEEPSEEK_API_KEY"):
-            return "deepseek"
-        elif os.getenv("OPENAI_API_KEY"):
-            return "openai"
-        return "none"
-
-    async def process_local(self, text: str) -> AIResult:
-        """本地规则引擎处理"""
-        metaphors = self._rule_based_detection(text)
-
-        return AIResult(
-            success=True,
-            data={"metaphors": metaphors},
-            confidence=0.45,  # 规则引擎置信度较低
-            provider="rule-engine",
-        )
-
-    async def process_api(self, text: str) -> AIResult:
-        """LLM API 处理"""
-        if self.llm_provider == "deepseek":
-            return await self._process_deepseek(text)
-        elif self.llm_provider == "openai":
-            return await self._process_openai(text)
-
-        return AIResult(success=False, error="No LLM API available")
-
-    def _rule_based_detection(self, text: str) -> list:
-        """基于规则的隐喻检测"""
-        metaphors = []
-
-        # 预定义隐喻模式
-        patterns = {
-            "TIME_IS_MONEY": {
-                "keywords": ["花费", "浪费", "节约", "投资"],
-                "source": "money",
-                "target": "time",
-            },
-            "LIFE_IS_JOURNEY": {
-                "keywords": ["路", "道路", "旅程", "起点", "终点"],
-                "source": "journey",
-                "target": "life",
-            },
-            # ... 更多模式
-        }
-
-        for metaphor_id, pattern in patterns.items():
-            for keyword in pattern["keywords"]:
-                if keyword in text:
-                    metaphors.append({
-                        "type": "conceptual",
-                        "metaphor_id": metaphor_id,
-                        "source_domain": pattern["source"],
-                        "target_domain": pattern["target"],
-                        "trigger": keyword,
-                        "confidence": 0.5,
-                    })
-
-        return metaphors
-
-    async def _process_deepseek(self, text: str) -> AIResult:
-        """DeepSeek API 隐喻识别"""
-        import httpx
-
-        prompt = f"""分析以下文本中的隐喻表达：
-
-文本：{text}
-
-请以 JSON 格式返回：
-{{
-    "metaphors": [
-        {{
-            "type": "conceptual|visual|multimodal",
-            "source_domain": "源域",
-            "target_domain": "目标域",
-            "trigger": "触发词/表达",
-            "confidence": 0.0-1.0
-        }}
-    ]
-}}"""
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {os.getenv('DEEPSEEK_API_KEY')}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.1,
-                },
-            )
-
-        if response.status_code == 200:
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-
-            import json
-            result = json.loads(content)
-
-            return AIResult(
-                success=True,
-                data=result,
-                confidence=0.88,
-                provider="deepseek",
-            )
-
-        return AIResult(success=False, error=f"API error: {response.status_code}")
-
-    async def _process_openai(self, text: str) -> AIResult:
-        """OpenAI API 隐喻识别"""
-        # 类似 DeepSeek 实现
-        pass
+```python
+COMMON_METAPHORS = {
+    "TIME_IS_MONEY": {
+        "source": "money",
+        "target": "time",
+        "keywords": ["花费", "浪费", "节约", "投资"],
+    },
+    "LIFE_IS_JOURNEY": {
+        "source": "journey",
+        "target": "life",
+        "keywords": ["路", "旅程", "起点", "终点"],
+    },
+    # ... 更多 Lakoff & Johnson 概念隐喻
+}
 ```
 
 ---
 
 ## 七、不可译性识别服务
 
-### 7.1 实现
+> 实际代码位置：`backend/app/services/untranslatability_service.py`
+
+### 7.1 模型选择
+
+| 方案 | 模型 | GPU | 准确性 | 费用 |
+|------|------|-----|--------|------|
+| **本地（规则）** | 文化专有项词典 + 规则 | ❌ | 50-60% | $0 |
+| **API（推荐）** | DeepSeek/ GPT-4o-mini | ❌ | 85-90% | ~$0.001/次 |
+
+### 7.2 不可译类型
 
 ```python
-# backend/app/services/ai/untrans_service.py
+# 语言层面
+LINGUISTIC_UNTRANSLATABLE = {
+    "phonological": ["pun", "谐音", "双关"],
+    "morphological": ["复合词", "派生词"],
+    "syntactic": ["话题-评论结构"],
+    "semantic": ["词汇空缺", "多义词"],
+}
 
-from .base import AIServiceBase, AIResult
+# 文化层面
+CULTURAL_SPECIFIC_ITEMS = {
+    "zh": {
+        "idioms": ["龙", "凤", "春节", "功夫"],
+        "social_terms": ["面子", "人情", "关系"],
+    },
+    "en": {
+        "idioms": ["break a leg", "piece of cake"],
+        "cultural_refs": ["Thanksgiving", "super bowl"],
+    },
+}
 
+# 语境层面
+CONTEXTUAL_UNTRANSLATABLE = {
+    "discourse": ["衔接手段", "言语行为"],
+    "pragmatic": ["隐含意义", "预设"],
+    "intercultural": ["禁忌", "礼貌策略"],
+}
+```
 
-class UntransService(AIServiceBase):
-    """不可译性识别服务"""
+### 7.3 混合检测流程
 
-    def __init__(self):
-        self.llm_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
-        super().__init__()
+```python
+async def detect_untranslatability(
+    self,
+    text: str,
+    source_language: str = "en",
+    target_language: str = "zh",
+    use_llm: bool = True,
+) -> Dict[str, Any]:
+    """混合检测：规则引擎 + LLM API"""
 
-    def _check_local_available(self) -> bool:
-        return True  # 词典始终可用
+    # 1. 规则引擎检测（快速）
+    rule_results = self._detect_with_rules(text, source_language)
 
-    def _check_api_available(self) -> bool:
-        return bool(self.llm_api_key)
+    # 2. LLM API 检测（如可用）
+    if use_llm and self.is_llm_available():
+        llm_results = await self._detect_with_llm(text, source_language, target_language)
 
-    async def process_local(self, text: str, source_lang: str, target_lang: str) -> AIResult:
-        """本地词典 + 规则"""
-        items = self._rule_based_detection(text, source_lang)
-
-        return AIResult(
-            success=True,
-            data={"items": items},
-            confidence=0.55,
-            provider="rule-engine",
-        )
-
-    async def process_api(self, text: str, source_lang: str, target_lang: str) -> AIResult:
-        """LLM API 处理"""
-        provider = "deepseek" if os.getenv("DEEPSEEK_API_KEY") else "openai"
-
-        prompt = f"""分析以下文本中翻译困难的内容：
-
-源语言：{source_lang}
-目标语言：{target_lang}
-文本：{text}
-
-请识别以下类型的不可译现象：
-1. 语言层面（语音、词汇、句法、语义）
-2. 文化层面（文化专有项、习语、典故）
-3. 语境层面（需要上下文理解）
-
-请以 JSON 格式返回：
-{{
-    "items": [
-        {{
-            "type": "linguistic|cultural|contextual",
-            "category": "具体类别",
-            "text": "原文片段",
-            "description": "不可译原因",
-            "severity": 1-5,
-            "translation_options": ["可能的翻译方案"]
-        }}
-    ]
-}}"""
-
-        # 调用 LLM API（类似 MetaphorService）
-        result = await self._call_llm(prompt)
-
-        if result.success:
-            result.provider = provider
-
-        return result
+    # 3. 合并去重
+    return merged_results
 ```
 
 ---
@@ -726,31 +616,35 @@ class UntransService(AIServiceBase):
 ### 8.2 配置示例 (.env)
 
 ```bash
-# AI 服务配置
-# ====================
+# AI 服务配置（低 GPU 依赖架构）
+# 优先使用本地模型，API 作为降级方案
 
-# Whisper 模型（CPU 可用：tiny/base/small）
+# LLM API Keys（至少配置一个）
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# LLM 模型选择（可选，默认自动选择）
+# DEEPSEEK_MODEL=deepseek-chat
+# OPENAI_MODEL=gpt-4o-mini
+# DASHSCOPE_MODEL=qwen-turbo
+
+# Whisper 模型（CPU 模式）
 WHISPER_MODEL=base
 
-# OCR API（可选）
-# 阿里云 - 免费额度大
-DASHSCOPE_API_KEY=sk-xxxxxxxx
+# 本地优先策略
+# true: 优先使用本地模型，API 作为降级
+# false: 优先使用 API，本地作为降级
+PREFER_LOCAL=true
 
-# LLM API（用于复杂语义分析）
-# DeepSeek - 性价比高（推荐）
-DEEPSEEK_API_KEY=sk-xxxxxxxx
+# 视觉分析 Provider
+# local: 仅使用本地 YOLOv8n（轻量GPU/CPU）
+# api: 仅使用云端 API
+# hybrid: 混合模式（推荐）
+VISION_PROVIDER=hybrid
 
-# 或 OpenAI（备用）
-# OPENAI_API_KEY=sk-xxxxxxxx
-
-# 视觉 API（可选）
-TENCENT_SECRET_ID=xxxxxxxx
-TENCENT_SECRET_KEY=xxxxxxxx
-
-# 处理策略
-PREFER_LOCAL=true          # 优先使用本地模型
-FALLBACK_TO_API=true       # 本地失败时调用 API
-LOCAL_ONLY=false           # 仅使用本地（离线模式）
+# OCR Provider
+OCR_PROVIDER=hybrid
 ```
 
 ---
